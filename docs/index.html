@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Update TACT</title>
+<meta name="description" content="Update your TACT over USB.">
+<script type="module" src="https://unpkg.com/esp-web-tools@10/dist/web/install-button.js?module"></script>
+<style>
+  :root {
+    --bg: #071019;
+    --panel: #0d1b28;
+    --border: #1d3243;
+    --text: #e8f1f7;
+    --dim: #8aa0b2;
+    --accent: #19c3f5;
+    --amber: #f5a623;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
+    line-height: 1.5;
+  }
+  main { max-width: 640px; margin: 0 auto; padding: 32px 16px 48px; }
+  h1 { font-size: 32px; letter-spacing: 3px; margin: 0 0 4px; }
+  h1 span { color: var(--accent); }
+  .sub { color: var(--dim); margin: 0 0 28px; }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 20px;
+    margin-bottom: 20px;
+  }
+  ol { margin: 0; padding-left: 22px; }
+  li { margin: 6px 0; }
+  .install { text-align: center; padding: 28px 20px; }
+  esp-web-install-button button[slot="activate"] {
+    background: var(--accent);
+    color: #04121b;
+    border: 0;
+    border-radius: 12px;
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    padding: 16px 36px;
+    cursor: pointer;
+  }
+  .version { color: var(--dim); font-size: 14px; margin-top: 12px; }
+  .warn { color: var(--amber); }
+  a { color: var(--accent); }
+  .note { color: var(--dim); font-size: 14px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>UPDATE <span>TACT</span></h1>
+  <p class="sub">Install the latest version on your TACT with a USB cable.</p>
+
+  <div class="card">
+    <strong>Before you start</strong>
+    <ol>
+      <li>Use a <strong>computer</strong> (Windows, Mac or Chromebook) with <strong>Google Chrome</strong> or <strong>Microsoft Edge</strong>.</li>
+      <li>Switch your TACT <strong>on</strong> and wait for the main menu.</li>
+      <li>Connect it to the computer with a <strong>USB cable that can carry data</strong>.</li>
+    </ol>
+  </div>
+
+  <div class="card install">
+    <esp-web-install-button manifest="manifest.json">
+      <button slot="activate">UPDATE TACT</button>
+      <span slot="unsupported">
+        <p class="warn">This browser can't update TACT.</p>
+        <p class="note">Open this page in Google Chrome or Microsoft Edge on a computer. Phones and tablets can't do it.</p>
+      </span>
+      <span slot="not-allowed">
+        <p class="warn">This page must be opened over https.</p>
+      </span>
+    </esp-web-install-button>
+    <div class="version">Latest version: 1.0.4</div>
+  </div>
+
+  <div class="card">
+    <strong>Then</strong>
+    <ol>
+      <li>Click <strong>UPDATE TACT</strong>.</li>
+      <li>In the box that appears, click your TACT in the list, then <strong>Connect</strong>.</li>
+      <li>Click <strong>Install</strong>, then <strong>Install</strong> again to confirm.</li>
+      <li>Wait until it says the installation is complete (about a minute). <span class="warn">Don't unplug it while it updates.</span></li>
+      <li>Click <strong>Close</strong>, unplug the cable. Your TACT restarts with the new version.</li>
+    </ol>
+    <p class="note">Your settings, saved Wi-Fi networks and stats are kept.</p>
+  </div>
+
+  <p class="note">Step-by-step help, and what to do if something goes wrong:
+    <a href="https://github.com/luminko/tact/wiki/Updating-by-USB">Updating by USB</a>.
+    Every version: <a href="https://github.com/luminko/tact/releases">GitHub Releases</a>.</p>
+</main>
+</body>
+</html>
