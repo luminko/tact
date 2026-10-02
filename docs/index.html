@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Update TACT</title>
 <meta name="description" content="Update your TACT over USB.">
-<script type="module" src="https://unpkg.com/esp-web-tools@10/dist/web/install-button.js?module"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
 <style>
   :root {
     --bg: #071019;
@@ -15,6 +15,8 @@
     --dim: #8aa0b2;
     --accent: #19c3f5;
     --amber: #f5a623;
+    --green: #2bd46a;
+    --red: #ff5a5f;
   }
   * { box-sizing: border-box; }
   body {
@@ -37,8 +39,8 @@
   }
   ol { margin: 0; padding-left: 22px; }
   li { margin: 6px 0; }
-  .install { text-align: center; padding: 28px 20px; }
-  esp-web-install-button button[slot="activate"] {
+  .center { text-align: center; padding: 28px 20px; }
+  button.big {
     background: var(--accent);
     color: #04121b;
     border: 0;
@@ -49,10 +51,17 @@
     padding: 16px 36px;
     cursor: pointer;
   }
+  button.big:disabled { opacity: 0.4; cursor: default; }
+  .bar { height: 14px; background: var(--border); border-radius: 7px; overflow: hidden; margin: 18px 0 8px; }
+  .bar div { height: 100%; width: 0; background: var(--accent); transition: width 0.2s; }
+  .msg { font-size: 18px; margin-top: 4px; }
+  .msg.ok { color: var(--green); }
+  .msg.bad { color: var(--red); }
+  .msg.warn { color: var(--amber); }
   .version { color: var(--dim); font-size: 14px; margin-top: 12px; }
-  .warn { color: var(--amber); }
-  a { color: var(--accent); }
   .note { color: var(--dim); font-size: 14px; }
+  a { color: var(--accent); }
+  [hidden] { display: none !important; }
 </style>
 </head>
 <body>
@@ -69,28 +78,35 @@
     </ol>
   </div>
 
-  <div class="card install">
-    <esp-web-install-button manifest="manifest.json">
-      <button slot="activate">UPDATE TACT</button>
-      <span slot="unsupported">
-        <p class="warn">This browser can't update TACT.</p>
-        <p class="note">Open this page in Google Chrome or Microsoft Edge on a computer. Phones and tablets can't do it.</p>
-      </span>
-      <span slot="not-allowed">
-        <p class="warn">This page must be opened over https.</p>
-      </span>
-    </esp-web-install-button>
-    <div class="version">Latest version: 1.0.4</div>
+  <div class="card center">
+    <div id="unsupported" hidden>
+      <p class="msg warn">This browser can't update TACT.</p>
+      <p class="note">Open this page in Google Chrome or Microsoft Edge on a computer. Phones and tablets can't do it.</p>
+    </div>
+    <div id="ready">
+      <button class="big" id="go">UPDATE TACT</button>
+      <div class="version" id="version">Latest version: ...</div>
+    </div>
+    <div id="busy" hidden>
+      <div class="msg" id="step">Connecting to TACT...</div>
+      <div class="bar"><div id="fill"></div></div>
+      <div class="note" id="pct"></div>
+      <p class="msg warn">Don't unplug TACT or close this page.</p>
+    </div>
+    <div id="result" hidden>
+      <div class="msg" id="outcome"></div>
+      <p class="note" id="detail"></p>
+      <button class="big" id="again" hidden>TRY AGAIN</button>
+    </div>
   </div>
 
   <div class="card">
-    <strong>Then</strong>
+    <strong>What happens</strong>
     <ol>
       <li>Click <strong>UPDATE TACT</strong>.</li>
-      <li>In the box that appears, click your TACT in the list, then <strong>Connect</strong>.</li>
-      <li>Click <strong>Install</strong>, then <strong>Install</strong> again to confirm.</li>
-      <li>Wait until it says the installation is complete (about a minute). <span class="warn">Don't unplug it while it updates.</span></li>
-      <li>Click <strong>Close</strong>, unplug the cable. Your TACT restarts with the new version.</li>
+      <li>A small box opens: click your TACT in the list, then <strong>Connect</strong>.</li>
+      <li>Wait while it updates (about a minute).</li>
+      <li>When it says <strong>Update complete</strong>, unplug the cable. Your TACT restarts with the new version.</li>
     </ol>
     <p class="note">Your settings, saved Wi-Fi networks and stats are kept.</p>
   </div>
@@ -99,5 +115,119 @@
     <a href="https://github.com/luminko/tact/wiki/Updating-by-USB">Updating by USB</a>.
     Every version: <a href="https://github.com/luminko/tact/releases">GitHub Releases</a>.</p>
 </main>
+
+<script type="module">
+import { ESPLoader, Transport } from "https://unpkg.com/esptool-js@0.7.0/bundle.js";
+
+const $ = (id) => document.getElementById(id);
+const show = (id, on) => { $(id).hidden = !on; };
+
+/* Writes only the parts listed in manifest.json, each at its own place.
+ * Nothing else is touched: settings, saved Wi-Fi and stats are kept. */
+let manifest = null;
+
+async function loadManifest() {
+  const r = await fetch("manifest.json", { cache: "no-store" });
+  manifest = await r.json();
+  $("version").textContent = "Latest version: " + manifest.version;
+}
+
+function done(ok, title, detail) {
+  show("busy", false);
+  show("result", true);
+  $("outcome").textContent = title;
+  $("outcome").className = "msg " + (ok ? "ok" : "bad");
+  $("detail").textContent = detail;
+  show("again", !ok);
+}
+
+/* A TACT has "tact" as the name of the firmware in one of its two slots */
+function isTact(bytes) {
+  // app description: magic 0xABCD5432 (little-endian), then the project name at +48
+  if (bytes[0] !== 0x32 || bytes[1] !== 0x54 || bytes[2] !== 0xCD || bytes[3] !== 0xAB) return false;
+  const name = new TextDecoder().decode(bytes.slice(48, 80)).replace(/\0.*$/s, "");
+  return name === "tact";
+}
+
+async function update() {
+  show("ready", false);
+  show("result", false);
+  show("busy", true);
+  $("step").textContent = "Connecting to TACT...";
+  $("fill").style.width = "0%";
+  $("pct").textContent = "";
+
+  let port;
+  try {
+    port = await navigator.serial.requestPort({ filters: [{ usbVendorId: 0x303a }] });
+  } catch (e) {
+    show("busy", false);
+    show("ready", true);
+    return; // the box was closed without picking: back to the start
+  }
+
+  const transport = new Transport(port, false);
+  try {
+    const loader = new ESPLoader({ transport, baudrate: 921600, romBaudrate: 115200, debugLogging: false });
+    await loader.main();
+
+    $("step").textContent = "Checking it's a TACT...";
+    const a = await loader.readFlash(0x20000 + 32, 80);
+    const b = await loader.readFlash(0x710000 + 32, 80);
+    if (!isTact(a) && !isTact(b)) {
+      await loader.after("hard_reset");
+      await transport.disconnect();
+      done(false, "This doesn't look like a TACT.", "Nothing was changed. Check you picked the right device in the list.");
+      return;
+    }
+
+    $("step").textContent = "Downloading the update...";
+    const files = [];
+    for (const p of manifest.parts) {
+      const r = await fetch(p.path, { cache: "no-store" });
+      if (!r.ok) throw new Error("download");
+      files.push({ data: new Uint8Array(await r.arrayBuffer()), address: p.offset });
+    }
+    const total = files.reduce((n, f) => n + f.data.length, 0);
+    const before = files.map((f, i) => files.slice(0, i).reduce((n, g) => n + g.data.length, 0));
+
+    $("step").textContent = "Updating TACT...";
+    await loader.writeFlash({
+      fileArray: files,
+      flashMode: "keep",
+      flashFreq: "keep",
+      flashSize: "keep",
+      eraseAll: false,
+      compress: true,
+      reportProgress: (i, written, size) => {
+        const pct = Math.floor(((before[i] + written / size * files[i].data.length) / total) * 100);
+        $("fill").style.width = pct + "%";
+        $("pct").textContent = pct + "%";
+      },
+      calculateMD5Hash: (image) => CryptoJS.MD5(CryptoJS.lib.WordArray.create(image)).toString(),
+    });
+
+    $("fill").style.width = "100%";
+    $("pct").textContent = "100%";
+    await loader.after("hard_reset");
+    await transport.disconnect();
+    done(true, "Update complete.", "TACT is restarting with version " + manifest.version + ". You can unplug the cable.");
+  } catch (e) {
+    try { await transport.disconnect(); } catch (_) {}
+    console.error(e);
+    done(false, "The update didn't finish.",
+      "Unplug TACT, plug it back in and try again. If it keeps failing, see the help page below.");
+  }
+}
+
+if (!("serial" in navigator)) {
+  show("ready", false);
+  show("unsupported", true);
+} else {
+  loadManifest().catch(() => { $("version").textContent = ""; });
+  $("go").addEventListener("click", update);
+  $("again").addEventListener("click", () => { show("result", false); show("ready", true); });
+}
+</script>
 </body>
 </html>
