@@ -61,6 +61,29 @@
   .version { color: var(--dim); font-size: 14px; margin-top: 12px; }
   .note { color: var(--dim); font-size: 14px; }
   a { color: var(--accent); }
+  button.link {
+    display: block;
+    margin: 18px auto 0;
+    background: none;
+    border: 0;
+    color: var(--dim);
+    font-size: 14px;
+    text-decoration: underline;
+    cursor: pointer;
+  }
+  .buttons { display: flex; gap: 12px; justify-content: center; margin-top: 18px; flex-wrap: wrap; }
+  button.plain, button.danger {
+    border-radius: 12px;
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    padding: 12px 22px;
+    cursor: pointer;
+  }
+  button.plain { background: var(--accent); color: #04121b; border: 0; }
+  button.danger { background: none; color: var(--red); border: 2px solid var(--red); }
+  #confirm { text-align: left; }
+  #confirm .buttons { justify-content: flex-start; }
   [hidden] { display: none !important; }
 </style>
 </head>
@@ -86,6 +109,17 @@
     <div id="ready">
       <button class="big" id="go">UPDATE TACT</button>
       <div class="version" id="version">Latest version: ...</div>
+      <button class="link" id="fresh">Erase and fresh install...</button>
+    </div>
+    <div id="confirm" hidden>
+      <p class="msg bad">Erase and fresh install</p>
+      <p><strong>This deletes everything on your TACT</strong>: settings, saved Wi-Fi networks and all stats.
+        It can't be undone. TACT then starts again as new, with the latest version.</p>
+      <p class="note">Make sure only your TACT is plugged in to this computer.</p>
+      <div class="buttons">
+        <button class="plain" id="fresh-cancel">CANCEL</button>
+        <button class="danger" id="fresh-go">ERASE AND INSTALL</button>
+      </div>
     </div>
     <div id="busy" hidden>
       <div class="msg" id="step">Connecting to TACT...</div>
@@ -149,8 +183,10 @@ function isTact(bytes) {
   return name === "tact";
 }
 
-async function update() {
+/* fresh = erase the whole device first (settings, Wi-Fi, stats), then install */
+async function update(fresh) {
   show("ready", false);
+  show("confirm", false);
   show("result", false);
   show("busy", true);
   $("step").textContent = "Connecting to TACT...";
@@ -171,14 +207,18 @@ async function update() {
     const loader = new ESPLoader({ transport, baudrate: 921600, romBaudrate: 115200, debugLogging: false });
     await loader.main();
 
-    $("step").textContent = "Checking it's a TACT...";
-    const a = await loader.readFlash(0x20000 + 32, 80);
-    const b = await loader.readFlash(0x710000 + 32, 80);
-    if (!isTact(a) && !isTact(b)) {
-      await loader.after("hard_reset");
-      await transport.disconnect();
-      done(false, "This doesn't look like a TACT.", "Nothing was changed. Check you picked the right device in the list.");
-      return;
+    /* an update only goes onto a TACT; a fresh install is also the way back
+     * for a TACT whose firmware is broken, so it doesn't ask (its warning did) */
+    if (!fresh) {
+      $("step").textContent = "Checking it's a TACT...";
+      const a = await loader.readFlash(0x20000 + 32, 80);
+      const b = await loader.readFlash(0x710000 + 32, 80);
+      if (!isTact(a) && !isTact(b)) {
+        await loader.after("hard_reset");
+        await transport.disconnect();
+        done(false, "This doesn't look like a TACT.", "Nothing was changed. Check you picked the right device in the list.");
+        return;
+      }
     }
 
     $("step").textContent = "Downloading the update...";
@@ -191,15 +231,16 @@ async function update() {
     const total = files.reduce((n, f) => n + f.data.length, 0);
     const before = files.map((f, i) => files.slice(0, i).reduce((n, g) => n + g.data.length, 0));
 
-    $("step").textContent = "Updating TACT...";
+    $("step").textContent = fresh ? "Erasing TACT (this takes a little while)..." : "Updating TACT...";
     await loader.writeFlash({
       fileArray: files,
       flashMode: "keep",
       flashFreq: "keep",
       flashSize: "keep",
-      eraseAll: false,
+      eraseAll: fresh, /* an update keeps everything; only a fresh install wipes */
       compress: true,
       reportProgress: (i, written, size) => {
+        $("step").textContent = fresh ? "Installing TACT..." : "Updating TACT...";
         const pct = Math.floor(((before[i] + written / size * files[i].data.length) / total) * 100);
         $("fill").style.width = pct + "%";
         $("pct").textContent = pct + "%";
@@ -211,7 +252,9 @@ async function update() {
     $("pct").textContent = "100%";
     await loader.after("hard_reset");
     await transport.disconnect();
-    done(true, "Update complete.", "TACT is restarting with version " + manifest.version + ". You can unplug the cable.");
+    done(true, fresh ? "Fresh install complete." : "Update complete.",
+      "TACT is restarting with version " + manifest.version +
+      (fresh ? ", as new, with default settings." : ".") + " You can unplug the cable.");
   } catch (e) {
     try { await transport.disconnect(); } catch (_) {}
     console.error(e);
@@ -225,7 +268,10 @@ if (!("serial" in navigator)) {
   show("unsupported", true);
 } else {
   loadManifest().catch(() => { $("version").textContent = ""; });
-  $("go").addEventListener("click", update);
+  $("go").addEventListener("click", () => update(false));
+  $("fresh").addEventListener("click", () => { show("ready", false); show("confirm", true); });
+  $("fresh-cancel").addEventListener("click", () => { show("confirm", false); show("ready", true); });
+  $("fresh-go").addEventListener("click", () => update(true));
   $("again").addEventListener("click", () => { show("result", false); show("ready", true); });
 }
 </script>
