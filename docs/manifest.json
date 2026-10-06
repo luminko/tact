@@ -1,10 +1,10 @@
 {
   "name": "TACT",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "parts": [
-    { "path": "firmware/1.4.0/boot.bin", "offset": 0 },
-    { "path": "firmware/1.4.0/table.bin", "offset": 32768 },
-    { "path": "firmware/1.4.0/select.bin", "offset": 61440 },
-    { "path": "firmware/1.4.0/tact-1.4.0.bin", "offset": 131072 }
+    { "path": "firmware/1.5.0/boot.bin", "offset": 0 },
+    { "path": "firmware/1.5.0/table.bin", "offset": 32768 },
+    { "path": "firmware/1.5.0/select.bin", "offset": 61440 },
+    { "path": "firmware/1.5.0/tact-1.5.0.bin", "offset": 131072 }
   ]
 }
