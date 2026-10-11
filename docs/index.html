@@ -228,6 +228,11 @@ async function update(fresh) {
       if (!r.ok) throw new Error("download");
       files.push({ data: new Uint8Array(await r.arrayBuffer()), address: p.offset });
     }
+    /* a fresh install wipes everything but the unit's certificate (its cert area), put back as it was */
+    if (fresh) {
+      const cert = await loader.readFlash(0x12000, 0x1000);
+      if (new TextDecoder().decode(cert.slice(0, 10)) === "TACT-CERT1") files.push({ data: cert, address: 0x12000 });
+    }
     const total = files.reduce((n, f) => n + f.data.length, 0);
     const before = files.map((f, i) => files.slice(0, i).reduce((n, g) => n + g.data.length, 0));
 
